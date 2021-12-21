@@ -1,51 +1,103 @@
 import numpy as np
 
 
+class NTransitionMemory:
+    def __init__(self, num_actors, horizon, gamma, lambd):
+        self.num_actors = num_actors
+        self.transit_memories = [TransitionMemory(horizon, gamma, lambd) for _ in range(num_actors)]
+
+
 class TransitionMemory:
-    def __init__(self, batch_size, gamma):
-        self.batch_size = batch_size
+    def __init__(self, horizon, gamma, lambd):
+        self.horizon = horizon
         self.gamma = gamma
-        self.batch_obs = []  # Should be converted into numpy array
-        self.batch_act = []
-        self.batch_ret = []
+        self.lambd = lambd
+        self.clear_batch()
         self.num_ep = 0
 
-    def collect(self, env, actor):
-        # Clear previous batch
-        self.batch_obs = []
-        self.batch_act = []
-        self.batch_ret = []
+    def collect(self, env, actor, critic):
+        self.clear_batch()
         self.num_ep = 0
 
         obs = env.reset()
         done = False
-        while len(self.batch_obs) < self.batch_size:
-            ep_obs = []
-            ep_act = []
-            ep_rew = []
-            while not done:
-                ep_obs.append(obs)
-                act = actor.get_action(obs)
-                ep_act.append(act)
-                obs, rew, done, _ = env.step(act)
-                ep_rew.append(rew)
+        ep_rew = []
+        ep_val = []
+        for i in range(self.horizon):
+            ep_val.append(critic.get_value(obs))
+            self.batch_obs.append(obs)
+            act = actor.get_action(obs)
+            self.batch_act.append(act)
+            obs, rew, done, _ = env.step(act)
+            ep_rew.append(rew)
 
-            ep_ret = self._compute_discounted_reward_to_go(ep_rew)
-            self.batch_obs.extend(ep_obs)
-            self.batch_act.extend(ep_act)
-            self.batch_ret.extend(ep_ret)
-            obs = env.reset()
-            done = False
-            self.num_ep += 1
+            if done:
+                self.batch_ret.extend(self._compute_discount_sum(ep_rew, self.gamma))
 
-        self.batch_obs = np.array(self.batch_obs[:self.batch_size])
-        self.batch_act = np.array(self.batch_act[:self.batch_size])
-        self.batch_ret = np.array(self.batch_ret[:self.batch_size])
+                ep_val.append(0)  # Add dummy zero.
+                ep_val = np.array(ep_val)
+                deltas = ep_rew + self.gamma * ep_val[1:] - ep_val[:-1]
+                self.batch_adv.extend(self._compute_discount_sum(deltas, self.gamma * self.lambd))
 
-    def _compute_discounted_reward_to_go(self, ep_rew):
-        n = len(ep_rew)
-        reward_to_go = [0] * n
-        reward_to_go[n - 1] = ep_rew[n - 1]
+                # Reset the environment.
+                ep_rew = []
+                ep_val = []
+                obs = env.reset()
+                done = False
+                self.num_ep += 1
+            elif i == self.horizon - 1:
+                # Bootstrap from last reward.
+                next_obs_value = critic.get_value(obs)
+                ep_rew[-1] = next_obs_value
+                self.batch_ret.extend(self._compute_discount_sum(ep_rew, self.gamma))
+
+                ep_val.append(next_obs_value)  # Add next value for bootstrap.
+                ep_val = np.array(ep_val)
+                deltas = ep_rew + self.gamma * ep_val[1:] - ep_val[:-1]
+                self.batch_adv.extend(self._compute_discount_sum(deltas, self.gamma * self.lambd))
+
+        assert len(self.batch_obs) == self.horizon
+        assert len(self.batch_act) == self.horizon
+        assert len(self.batch_ret) == self.horizon
+        assert len(self.batch_adv) == self.horizon
+
+        self.batch_obs = np.array(self.batch_obs)
+        self.batch_act = np.array(self.batch_act)
+        self.batch_ret = np.array(self.batch_ret)
+        self.batch_adv = np.array(self.batch_adv)
+
+        return len(self.batch_obs)
+
+    def get_minibatch(self, minibatch_idx, minibatch_size):
+        obs = self.batch_obs[minibatch_idx * minibatch_size:(minibatch_idx + 1) * minibatch_size]
+        act = self.batch_act[minibatch_idx * minibatch_size:(minibatch_idx + 1) * minibatch_size]
+        ret = self.batch_ret[minibatch_idx * minibatch_size:(minibatch_idx + 1) * minibatch_size]
+        adv = self.batch_adv[minibatch_idx * minibatch_size:(minibatch_idx + 1) * minibatch_size]
+        return obs, act, ret, adv
+
+    def shuffle(self):
+        idx = np.random.permutation(len(self.batch_obs))
+        self.batch_obs = self.batch_obs[idx]
+        self.batch_act = self.batch_act[idx]
+        self.batch_ret = self.batch_ret[idx]
+        self.batch_adv = self.batch_adv[idx]
+
+    def clear_batch(self):
+        self.batch_obs = []  # Should be converted into numpy array
+        self.batch_act = []
+        self.batch_ret = []
+        self.batch_adv = []
+
+    def _compute_discount_sum(self, vals, discount):
+        """
+            input: vals = [a0, a1, a2]
+            output: [a0 + discount * a1 + discount ^ 2 * a2,
+                     a1 + discount * a2,
+                     a2]
+        """
+        n = len(vals)
+        discounted = [0] * n
+        discounted[n - 1] = vals[n - 1]
         for i in reversed(range(n - 1)):
-            reward_to_go[i] = ep_rew[i] + self.gamma * reward_to_go[i + 1]
-        return reward_to_go
+            discounted[i] = vals[i] + discount * discounted[i + 1]
+        return discounted

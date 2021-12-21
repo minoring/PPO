@@ -1,0 +1,10 @@
+# Hyperparameters from High Dimensional Continuous Control Using Generalized Advantage Estimation, Schulman et al. 2016
+hyperparams:
+  cartpole:
+    timestep: 1000000 # 1 million timestep benchmark.
+    horizon: 1000 # Horizon T
+    stepsize: 0.0003 # Adam stepsize
+    num_epochs: 10
+    minibatch_size: 64
+    gamma: 0.98 # Discount
+    lambd: 0.96 # GAE parameter, lambda.

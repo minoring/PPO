@@ -1,0 +1,10 @@
+# Hyperparameters from Proximal Policy Optimization Algorithms, Schulman et al. 2017
+hyperparams:
+  mujoco:
+    timestep: 1000000 # 1 million timestep benchmark.
+    horizon: 2048 # Horizon T
+    stepsize: 0.0003 # Adam stepsize
+    num_epochs: 10
+    minibatch_size: 64
+    gamma: 0.99 # Discount
+    lambd: 0.95 # GAE parameter, lambda.
