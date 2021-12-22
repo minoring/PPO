@@ -22,10 +22,16 @@ def criterion_actor(actor, actor_old, surrogate_objective, hyperparams, obs, act
     # Thus, do summation.
     # log(p(a_1, a_2, a_3,... , a_n)) = log(p(a_1)) + ... , + log(p(a_n))
     # And our actions are independent due to our policy was diagonal Gaussian.
-    if surrogate_objective == 'clipping':
-
     logp = actor(obs).log_prob(act).sum(axis=-1)
-    return -(logp * adv).mean()
+    logp_old = actor_old(obs).log_prob(act).sum(axis=-1).detach()
+
+    ratio = torch.exp(logp - logp_old)
+    if surrogate_objective == 'clipping':
+        return -(torch.min(
+            ratio * adv,
+            torch.clamp(ratio, 1 - hyperparams['eps'], 1 + hyperparams['eps']) * adv)).mean()
+
+    return -(ratio * adv).mean()
 
 
 def criterion_value(value_net, obs, ret):
@@ -56,14 +62,13 @@ def main():
     hyperparams = config['hyperparams'][args.hyperparams]
 
     env = get_env(args.env)
-    logger = Logger(args.env, args.log_dir, args.log_csv_path)
+    logger = Logger(args.env, args.log_dir, args.log_csv_path, args.seed)
 
     random.seed(args.seed)
     torch.manual_seed(args.seed)
     np.random.seed(args.seed)
     env.seed(args.seed)
 
-    env.reset()
     actor = ActorNet(env.observation_space.shape[0], env.action_space.shape[0])
     actor_old = ActorNet(env.observation_space.shape[0], env.action_space.shape[0])
     value_net = ValueNet(env.observation_space.shape[0])
@@ -81,12 +86,14 @@ def main():
 
         actor_old.load_state_dict(actor.state_dict())
         for epoch in range(hyperparams['num_epochs']):
-            # memory.shuffle()
+            if args.shuffle:
+                memory.shuffle()
             for minibatch_idx in range(len(memory.batch_obs) // hyperparams['minibatch_size']):
                 obs, act, ret, adv = memory.get_minibatch(minibatch_idx,
                                                           hyperparams['minibatch_size'])
                 # Update policy.
-                actor_loss = criterion_actor(actor, actor_old, args.surrogate_objective, hyperparams, obs, act, adv)
+                actor_loss = criterion_actor(actor, actor_old, args.surrogate_objective,
+                                             hyperparams, obs, act, adv)
                 actor_optim.zero_grad()
                 actor_loss.backward()
                 actor_optim.step()
@@ -95,6 +102,8 @@ def main():
                 value_optim.zero_grad()
                 value_loss.backward()
                 value_optim.step()
+                # TODO(minho): Add Entropy?
+        actor_old.load_state_dict(actor.state_dict())
 
         num_updates += 1
         if num_updates % args.log_interval == 0:
@@ -104,6 +113,7 @@ def main():
             print("Actor Loss: {:.4f}\tValue Loss: {:.4f}".format(actor_loss.item(),
                                                                   value_loss.item()))
             logger.log_scalar('EpisodeReward', episode_reward, timestep)
+            logger.log_scalar('NumEpisodeInTrain', memory.num_ep, timestep)
             logger.log_scalar('ActorLoss', actor_loss.item(), timestep)
             logger.log_scalar('ValueLoss', value_loss.item(), timestep)
 

@@ -8,3 +8,4 @@ hyperparams:
     minibatch_size: 64
     gamma: 0.99 # Discount
     lambd: 0.95 # GAE parameter, lambda.
+    eps: 0.2 # Clip epsilon

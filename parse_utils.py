@@ -14,9 +14,9 @@ def get_train_args():
                         help='Environment for continuous control problem',
                         required=True)
     parser.add_argument('--render',
-                    help='Whether render in test run',
-                    action='store_true',
-                    default=False)
+                        help='Whether render in test run',
+                        action='store_true',
+                        default=False)
     parser.add_argument('--hyperparams',
                         help='Hyperparameters to use. Check Appendix A. Schulman et al. 2017',
                         choices=['mujoco', 'roboschool', 'atari'],
@@ -25,13 +25,17 @@ def get_train_args():
     parser.add_argument('--log-csv-path', help='Path to csv file to save log', default='log.csv')
     parser.add_argument('--model-save-path', help='Path to save trained model', default='model.pt')
     parser.add_argument('--log-interval',
-                        help='How many steps to update before log (default: 10)',
+                        help='How many steps to update before log (default: 1)',
                         type=int,
-                        default=10)
+                        default=1)
     parser.add_argument('--surrogate-objective',
                         help='Surrogate objective to train PPO',
                         choices=['no-clipping-penalty', 'clipping', 'kl-penalty'],
                         required=True)
+    parser.add_argument('--shuffle',
+                        help='Whether to shuffle the batch of the memory',
+                        action='store_true',
+                        default=False)
     args = parser.parse_args()
 
     return args

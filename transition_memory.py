@@ -1,10 +1,25 @@
+from multiprocessing import Process
+
 import numpy as np
 
 
 class NTransitionMemory:
+    # TODO(minho): Implement N actor collect.
     def __init__(self, num_actors, horizon, gamma, lambd):
         self.num_actors = num_actors
-        self.transit_memories = [TransitionMemory(horizon, gamma, lambd) for _ in range(num_actors)]
+        self.transition_memories = [
+            TransitionMemory(horizon, gamma, lambd) for _ in range(num_actors)
+        ]
+
+    def collect(self, env, actor, critic):
+        procs = []
+        for i in range(self.num_actors):
+            proc = Process(target=self.transition_memories[i].collect, args=(env, actor, critic))
+            procs.append(proc)
+            proc.start()
+
+        for proc in procs:
+            proc.join()
 
 
 class TransitionMemory:
@@ -34,7 +49,9 @@ class TransitionMemory:
             if done:
                 self.batch_ret.extend(self._compute_discount_sum(ep_rew, self.gamma))
 
-                ep_val.append(0)  # Add dummy zero.
+                # Compute Advantage.
+                # High-Dimensional Continuous Control Using Generalized Advantage Estimation, John Schulman et al. 2016
+                ep_val.append(0)  # Add dummy zero for indexing.
                 ep_val = np.array(ep_val)
                 deltas = ep_rew + self.gamma * ep_val[1:] - ep_val[:-1]
                 self.batch_adv.extend(self._compute_discount_sum(deltas, self.gamma * self.lambd))
@@ -46,15 +63,17 @@ class TransitionMemory:
                 done = False
                 self.num_ep += 1
             elif i == self.horizon - 1:
-                # Bootstrap from last reward.
+                # Bootstrap from next state.
                 next_obs_value = critic.get_value(obs)
                 ep_rew[-1] = next_obs_value
                 self.batch_ret.extend(self._compute_discount_sum(ep_rew, self.gamma))
 
-                ep_val.append(next_obs_value)  # Add next value for bootstrap.
+                # Compute Advantage.
+                ep_val.append(next_obs_value)
                 ep_val = np.array(ep_val)
                 deltas = ep_rew + self.gamma * ep_val[1:] - ep_val[:-1]
                 self.batch_adv.extend(self._compute_discount_sum(deltas, self.gamma * self.lambd))
+                self.num_ep += 1
 
         assert len(self.batch_obs) == self.horizon
         assert len(self.batch_act) == self.horizon
@@ -76,6 +95,7 @@ class TransitionMemory:
         return obs, act, ret, adv
 
     def shuffle(self):
+        """Shuffle the batch so that minibatch do not always optimize same thing"""
         idx = np.random.permutation(len(self.batch_obs))
         self.batch_obs = self.batch_obs[idx]
         self.batch_act = self.batch_act[idx]
@@ -83,7 +103,7 @@ class TransitionMemory:
         self.batch_adv = self.batch_adv[idx]
 
     def clear_batch(self):
-        self.batch_obs = []  # Should be converted into numpy array
+        self.batch_obs = []
         self.batch_act = []
         self.batch_ret = []
         self.batch_adv = []
@@ -96,8 +116,8 @@ class TransitionMemory:
                      a2]
         """
         n = len(vals)
-        discounted = [0] * n
-        discounted[n - 1] = vals[n - 1]
+        discounted_sum = [0] * n
+        discounted_sum[n - 1] = vals[n - 1]
         for i in reversed(range(n - 1)):
-            discounted[i] = vals[i] + discount * discounted[i + 1]
-        return discounted
+            discounted_sum[i] = vals[i] + discount * discounted_sum[i + 1]
+        return discounted_sum

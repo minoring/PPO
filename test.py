@@ -2,9 +2,8 @@ import torch
 import numpy as np
 from gym.wrappers import RecordVideo
 
-from model import VPG
+from model import ActorNet
 from parse_utils import get_test_args
-from logger import Logger
 from env import get_env
 import pytorch_utils as ptu
 import pytorch_utils as ptu
@@ -15,7 +14,7 @@ def main():
 
     env = get_env(args.env)
 
-    actor = VPG(env.observation_space.shape[0], env.action_space.shape[0])
+    actor = ActorNet(env.observation_space.shape[0], env.action_space.shape[0])
     actor.load_state_dict(torch.load(args.trained_model_path))
     actor.to(ptu.device)
 
