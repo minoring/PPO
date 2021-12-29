@@ -29,21 +29,24 @@ class TransitionMemory:
         self.lambd = lambd
         self.clear_batch()
         self.num_ep = 0
+        self.ep_rets = []  # Undiscounted returns for each episode. This is for logging.
 
     def collect(self, env, actor, critic):
         self.clear_batch()
         self.num_ep = 0
+        self.ep_rets = []
 
         obs = env.reset()
         done = False
-        ep_rew = []
-        ep_val = []
+        ep_ret, ep_rew, ep_val = 0, [], []
         for i in range(self.horizon):
             ep_val.append(critic.get_value(obs))
             self.batch_obs.append(obs)
             act = actor.get_action(obs)
             self.batch_act.append(act)
             obs, rew, done, _ = env.step(act)
+
+            ep_ret += rew
             ep_rew.append(rew)
 
             if done:
@@ -55,10 +58,10 @@ class TransitionMemory:
                 ep_val = np.array(ep_val)
                 deltas = ep_rew + self.gamma * ep_val[1:] - ep_val[:-1]
                 self.batch_adv.extend(self._compute_discount_sum(deltas, self.gamma * self.lambd))
+                self.ep_rets.append(ep_ret)
 
                 # Reset the environment.
-                ep_rew = []
-                ep_val = []
+                ep_ret, ep_rew, ep_val = 0, [], []
                 obs = env.reset()
                 done = False
                 self.num_ep += 1
@@ -73,17 +76,18 @@ class TransitionMemory:
                 ep_val = np.array(ep_val)
                 deltas = ep_rew + self.gamma * ep_val[1:] - ep_val[:-1]
                 self.batch_adv.extend(self._compute_discount_sum(deltas, self.gamma * self.lambd))
-                self.num_ep += 1
 
         assert len(self.batch_obs) == self.horizon
         assert len(self.batch_act) == self.horizon
         assert len(self.batch_ret) == self.horizon
         assert len(self.batch_adv) == self.horizon
+        assert len(self.ep_rets) == self.num_ep
 
         self.batch_obs = np.array(self.batch_obs)
         self.batch_act = np.array(self.batch_act)
         self.batch_ret = np.array(self.batch_ret)
         self.batch_adv = np.array(self.batch_adv)
+        self.ep_rets = np.array(self.ep_rets)
 
         return len(self.batch_obs)
 

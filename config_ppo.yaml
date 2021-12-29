@@ -9,3 +9,4 @@ hyperparams:
     gamma: 0.99 # Discount
     lambd: 0.95 # GAE parameter, lambda.
     eps: 0.2 # Clip epsilon
+    kl_target: 0.01 # Adaptive KL d_targ

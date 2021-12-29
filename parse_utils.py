@@ -23,15 +23,19 @@ def get_train_args():
                         required=True)
     parser.add_argument('--log-dir', help='Directory to save log', default='log')
     parser.add_argument('--log-csv-path', help='Path to csv file to save log', default='log.csv')
-    parser.add_argument('--model-save-path', help='Path to save trained model', default='model.pt')
+    parser.add_argument('--model-save-path', help='Path to save trained model')
     parser.add_argument('--log-interval',
-                        help='How many steps to update before log (default: 1)',
+                        help='How many batch update before log (default: 1)',
                         type=int,
                         default=1)
     parser.add_argument('--surrogate-objective',
                         help='Surrogate objective to train PPO',
                         choices=['no-clipping-penalty', 'clipping', 'kl-penalty'],
                         required=True)
+    parser.add_argument('--ent-coef',
+                        help='Entropy coefficient',
+                        type=float,
+                        default=0.0)
     parser.add_argument('--shuffle',
                         help='Whether to shuffle the batch of the memory',
                         action='store_true',
@@ -42,7 +46,8 @@ def get_train_args():
 
 
 def get_test_args():
-    parser = argparse.ArgumentParser("Test DQN playing Atari")
+    parser = argparse.ArgumentParser(
+        'Test an agent on high-dimensional continuous control problems')
     parser.add_argument('--trained-model-path',
                         help='Path to trained model. Use this model for testing',
                         required=True)
@@ -55,5 +60,14 @@ def get_test_args():
     parser.add_argument('--num-test-run', help='Number of test run', type=int, default=10)
 
     args = parser.parse_args()
+    return args
 
+
+def get_plot_args():
+    parser = argparse.ArgumentParser('Plot learning curve')
+    parser.add_argument('--learning-curve-csv',
+                        help='Path to learning curve csv file of ppo',
+                        required=True)
+
+    args = parser.parse_args()
     return args

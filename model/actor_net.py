@@ -16,11 +16,13 @@ class ActorNet(nn.Module):
         self.fc1 = nn.Linear(self.obs_dim, 64)
         self.fc2 = nn.Linear(64, 64)
         self.mean_out = nn.Linear(64, self.act_dim)
-        self.std = torch.full((act_dim, ), 0.1,
-                              device=ptu.device)  # Standard deviations are not trained.
+        log_std = torch.full((act_dim, ), -0.5, device=ptu.device)
+        self.log_std = nn.Parameter(log_std)
+
+        self.beta = 1 # KL-penalty coefficient.
 
     def get_action(self, obs):
-        assert len(obs.shape) <= 1 # Single observation is expected as an input.
+        assert len(obs.shape) <= 1  # Single observation is expected as an input.
         obs = obs[np.newaxis, ...]
         obs = ptu.to_tensor(obs)
         with torch.no_grad():
@@ -30,5 +32,6 @@ class ActorNet(nn.Module):
         x = torch.tanh(self.fc1(obs))
         x = torch.tanh(self.fc2(x))
         mean = self.mean_out(x)
+        std = torch.exp(self.log_std)
 
-        return Normal(mean, self.std)
+        return Normal(mean, std)
