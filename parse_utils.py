@@ -32,14 +32,15 @@ def get_train_args():
                         help='Surrogate objective to train PPO',
                         choices=['no-clipping-penalty', 'clipping', 'kl-penalty'],
                         required=True)
-    parser.add_argument('--ent-coef',
-                        help='Entropy coefficient',
-                        type=float,
-                        default=0.0)
+    parser.add_argument('--ent-coef', help='Entropy coefficient', type=float, default=0.0)
     parser.add_argument('--shuffle',
                         help='Whether to shuffle the batch of the memory',
                         action='store_true',
                         default=False)
+    parser.add_argument('--n-actors',
+                        help='The number of parallel actors to collect T timestpes of data',
+                        type=int,
+                        default=1)
     args = parser.parse_args()
 
     return args
@@ -68,6 +69,7 @@ def get_plot_args():
     parser.add_argument('--learning-curve-csv',
                         help='Path to learning curve csv file of ppo',
                         required=True)
+    parser.add_argument('--save-figure-path', help='Path to save the figure')
 
     args = parser.parse_args()
     return args

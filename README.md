@@ -26,6 +26,8 @@ We compare the surrogate objectives by plotting learning curve from 7 environmen
 ![](assets/surrogate_objectives.png)
 
 **Learning Curve**
+![](assets/learning_curve.png)
+
 
 ### Effect of the Entropy
 
