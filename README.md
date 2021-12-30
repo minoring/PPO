@@ -61,10 +61,6 @@ After training 1M timesteps of PPO (clipping), we compute the average return of 
 
 ## References
 
-### Implementation
-
-Code for comparing results from [pytorch-a2c-ppo-acktr](https://github.com/ikostrikov/pytorch-a2c-ppo-acktr-gail)
-
 ### Paper
 
 - [Proximal Policy Optimization Algorithms](https://arxiv.org/abs/1707.06347), Schulman et al. 2017
