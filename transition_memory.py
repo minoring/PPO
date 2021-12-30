@@ -1,32 +1,18 @@
-from multiprocessing import Process
-
 import numpy as np
 
-
-class NTransitionMemory:
-    # TODO(minho): Implement N actor collect.
-    def __init__(self, num_actors, horizon, gamma, lambd):
-        self.num_actors = num_actors
-        self.transition_memories = [
-            TransitionMemory(horizon, gamma, lambd) for _ in range(num_actors)
-        ]
-
-    def collect(self, env, actor, critic):
-        procs = []
-        for i in range(self.num_actors):
-            proc = Process(target=self.transition_memories[i].collect, args=(env, actor, critic))
-            procs.append(proc)
-            proc.start()
-
-        for proc in procs:
-            proc.join()
+from torch.utils.data.sampler import BatchSampler, SequentialSampler, SubsetRandomSampler
 
 
 class TransitionMemory:
-    def __init__(self, horizon, gamma, lambd):
-        self.horizon = horizon
-        self.gamma = gamma
-        self.lambd = lambd
+    def __init__(self, obs_dim, act_dim, n_actors, hyperparams):
+        self.obs_dim = obs_dim
+        self.act_dim = act_dim
+        self.n_actors = n_actors
+        self.horizon = hyperparams['horizon']
+        self.gamma = hyperparams['gamma']
+        self.lambd = hyperparams['lambd']
+        self.minibatch_size = hyperparams['minibatch_size']
+        self.batch_size = self.n_actors * self.horizon
         self.clear_batch()
         self.num_ep = 0
         self.ep_rets = []  # Undiscounted returns for each episode. This is for logging.
@@ -90,6 +76,16 @@ class TransitionMemory:
         self.ep_rets = np.array(self.ep_rets)
 
         return len(self.batch_obs)
+
+    def minibatch_generator(self):
+        # TODO(minho): Use RandomSampler when multi-processing works.
+        # sampler = BatchSampler(SubsetRandomSampler(range(self.batch_size), self.minibatch_size),
+        #                        drop_last=True)
+        sampler = BatchSampler(SequentialSampler(range(self.batch_size), self.minibatch_size),
+                        drop_last=True)
+        for indices in sampler:
+            pass
+
 
     def get_minibatch(self, minibatch_idx, minibatch_size):
         obs = self.batch_obs[minibatch_idx * minibatch_size:(minibatch_idx + 1) * minibatch_size]
