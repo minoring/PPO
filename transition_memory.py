@@ -1,10 +1,12 @@
+import torch
 import numpy as np
 
 from torch.utils.data.sampler import BatchSampler, SequentialSampler, SubsetRandomSampler
 
 
 class TransitionMemory:
-    def __init__(self, obs_dim, act_dim, n_actors, hyperparams):
+    def __init__(self, env, obs_dim, act_dim, n_actors, hyperparams):
+        self.env = env
         self.obs_dim = obs_dim
         self.act_dim = act_dim
         self.n_actors = n_actors
@@ -12,101 +14,81 @@ class TransitionMemory:
         self.gamma = hyperparams['gamma']
         self.lambd = hyperparams['lambd']
         self.minibatch_size = hyperparams['minibatch_size']
+
         self.batch_size = self.n_actors * self.horizon
-        self.clear_batch()
+        # Initialize batch of transition.
+        self.batch_obs = torch.zeros(self.horizon + 1, self.n_actors, self.obs_dim)
+        self.batch_act = torch.zeros(self.horizon, self.n_actors, self.act_dim)
+        self.batch_rew = torch.zeros(self.horizon, self.n_actors, 1)
+        self.batch_val = torch.zeros(self.horizon + 1, n_actors, 1)
+        self.batch_ret = torch.zeros(self.horizon + 1, self.n_actors, 1)
+        self.batch_adv = torch.zeros(self.horizon, self.n_actors, 1)
+        self.batch_not_done_mask = torch.full((self.horizon + 1, self.n_actors, 1),
+                                              False,
+                                              dtype=torch.bool)
+        self.batch_obs[-1] = self.env.reset()  # Init first obs.
+
         self.num_ep = 0
         self.ep_rets = []  # Undiscounted returns for each episode. This is for logging.
 
-    def collect(self, env, actor, critic):
-        self.clear_batch()
-        self.num_ep = 0
-        self.ep_rets = []
-
-        obs = env.reset()
-        done = False
-        ep_ret, ep_rew, ep_val = 0, [], []
-        for i in range(self.horizon):
-            ep_val.append(critic.get_value(obs))
-            self.batch_obs.append(obs)
+    def collect(self, actor, critic):
+        # Initialize from last trajectory.
+        self.batch_obs[0].copy_(self.batch_obs[-1])
+        self.batch_not_done_mask[0].copy_(self.batch_not_done_mask[-1])
+        obs = self.batch_obs[0]
+        # Collect Horizon x NumActors transition.
+        for step in range(self.horizon):
+            val = critic.get_value(obs)
+            self.batch_val[step].copy_(val)
             act = actor.get_action(obs)
-            self.batch_act.append(act)
-            obs, rew, done, _ = env.step(act)
+            obs, rew, done, _ = self.env.step(act)
+            self.batch_obs[step + 1].copy_(obs)  # This is next observation.
+            self.batch_act[step].copy_(act)
+            self.batch_rew[step].copy_(rew)
+            # The env.step() returns done in np.array type.
+            # Convert it into torch tensor.
+            done = torch.tensor(done[..., np.newaxis], dtype=torch.bool)
+            not_done = torch.logical_not(done)
+            # https://stable-baselines3.readthedocs.io/en/master/guide/vec_envs.html
+            # When using vectorized environments, the environments are automatically reset at the
+            # end of each episode. Thus, the observation returned for the i-th environment when
+            # done[i] is true will in fact be the first observation of the next episode,
+            # not the last observation of the episode that has just terminated.
+            self.batch_not_done_mask[step + 1].copy_(not_done)  # Whether next state is not done.
 
-            ep_ret += rew
-            ep_rew.append(rew)
+        self.num_ep = torch.logical_not(self.batch_not_done_mask).sum().item()
+        # Compute Return and Advantage.
+        next_val = critic.get_value(obs)
+        self.batch_val[-1] = next_val
+        self.batch_ret[-1] = next_val
+        GAE = 0
+        for step in reversed(range(self.horizon)):
+            self.batch_ret[step] = self.batch_rew[step] + self.gamma * self.batch_ret[
+                step + 1] * self.batch_not_done_mask[step + 1]
+            delta = self.batch_rew[step] + self.gamma * self.batch_val[
+                step + 1] * self.batch_not_done_mask[step + 1] - self.batch_val[step]
+            GAE = delta + self.gamma * self.lambd * self.batch_not_done_mask[step + 1] * GAE
+            self.batch_adv[step] = GAE
 
-            if done:
-                self.batch_ret.extend(self._compute_discount_sum(ep_rew, self.gamma))
-
-                # Compute Advantage.
-                # High-Dimensional Continuous Control Using Generalized Advantage Estimation, John Schulman et al. 2016
-                ep_val.append(0)  # Add dummy zero for indexing.
-                ep_val = np.array(ep_val)
-                deltas = ep_rew + self.gamma * ep_val[1:] - ep_val[:-1]
-                self.batch_adv.extend(self._compute_discount_sum(deltas, self.gamma * self.lambd))
-                self.ep_rets.append(ep_ret)
-
-                # Reset the environment.
-                ep_ret, ep_rew, ep_val = 0, [], []
-                obs = env.reset()
-                done = False
-                self.num_ep += 1
-            elif i == self.horizon - 1:
-                # Bootstrap from next state.
-                next_obs_value = critic.get_value(obs)
-                ep_rew[-1] = next_obs_value
-                self.batch_ret.extend(self._compute_discount_sum(ep_rew, self.gamma))
-
-                # Compute Advantage.
-                ep_val.append(next_obs_value)
-                ep_val = np.array(ep_val)
-                deltas = ep_rew + self.gamma * ep_val[1:] - ep_val[:-1]
-                self.batch_adv.extend(self._compute_discount_sum(deltas, self.gamma * self.lambd))
-
-        assert len(self.batch_obs) == self.horizon
-        assert len(self.batch_act) == self.horizon
-        assert len(self.batch_ret) == self.horizon
-        assert len(self.batch_adv) == self.horizon
-        assert len(self.ep_rets) == self.num_ep
-
-        self.batch_obs = np.array(self.batch_obs)
-        self.batch_act = np.array(self.batch_act)
-        self.batch_ret = np.array(self.batch_ret)
-        self.batch_adv = np.array(self.batch_adv)
-        self.ep_rets = np.array(self.ep_rets)
-
-        return len(self.batch_obs)
+        return self.batch_size
 
     def minibatch_generator(self):
-        # TODO(minho): Use RandomSampler when multi-processing works.
-        # sampler = BatchSampler(SubsetRandomSampler(range(self.batch_size), self.minibatch_size),
+        # Random minibatch does not work... why?
+        # sampler = BatchSampler(SubsetRandomSampler(range(self.batch_size)),
+        #                        self.minibatch_size,
         #                        drop_last=True)
-        sampler = BatchSampler(SequentialSampler(range(self.batch_size), self.minibatch_size),
-                        drop_last=True)
+        sampler = BatchSampler(SequentialSampler(range(self.batch_size)),
+                               self.minibatch_size,
+                               drop_last=True)
         for indices in sampler:
-            pass
+            minibatch_obs = self.batch_obs[:-1].view(self.horizon * self.n_actors,
+                                                     self.obs_dim)[indices]
+            minibatch_act = self.batch_act.view(self.horizon * self.n_actors, self.act_dim)[indices]
+            minibatch_ret = self.batch_ret[:-1].view(self.horizon * self.n_actors, 1)[indices]
+            minibatch_adv = self.batch_adv.view(self.horizon * self.n_actors, 1)[indices]
+            minibatch_val = self.batch_val[:-1].view(self.horizon * self.n_actors, 1)[indices]
 
-
-    def get_minibatch(self, minibatch_idx, minibatch_size):
-        obs = self.batch_obs[minibatch_idx * minibatch_size:(minibatch_idx + 1) * minibatch_size]
-        act = self.batch_act[minibatch_idx * minibatch_size:(minibatch_idx + 1) * minibatch_size]
-        ret = self.batch_ret[minibatch_idx * minibatch_size:(minibatch_idx + 1) * minibatch_size]
-        adv = self.batch_adv[minibatch_idx * minibatch_size:(minibatch_idx + 1) * minibatch_size]
-        return obs, act, ret, adv
-
-    def shuffle(self):
-        """Shuffle the batch so that minibatch do not always optimize same thing"""
-        idx = np.random.permutation(len(self.batch_obs))
-        self.batch_obs = self.batch_obs[idx]
-        self.batch_act = self.batch_act[idx]
-        self.batch_ret = self.batch_ret[idx]
-        self.batch_adv = self.batch_adv[idx]
-
-    def clear_batch(self):
-        self.batch_obs = []
-        self.batch_act = []
-        self.batch_ret = []
-        self.batch_adv = []
+            yield minibatch_obs, minibatch_act, minibatch_ret, minibatch_adv, minibatch_val
 
     def _compute_discount_sum(self, vals, discount):
         """

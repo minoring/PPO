@@ -1,10 +1,10 @@
 import torch
 import numpy as np
+import gym
 from gym.wrappers import RecordVideo
 
 from model import ActorNet
 from parse_utils import get_test_args
-from env import get_env
 import pytorch_utils as ptu
 import pytorch_utils as ptu
 
@@ -12,7 +12,7 @@ import pytorch_utils as ptu
 def main():
     args = get_test_args()
 
-    env = get_env(args.env)
+    env = gym.make(args.env)
 
     actor = ActorNet(env.observation_space.shape[0], env.action_space.shape[0])
     actor.load_state_dict(torch.load(args.trained_model_path))

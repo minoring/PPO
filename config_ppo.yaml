@@ -10,3 +10,13 @@ hyperparams:
     lambd: 0.95 # GAE parameter, lambda.
     eps: 0.2 # Clip epsilon
     kl_target: 0.01 # Adaptive KL d_targ
+  humanoid:
+    timestep: 50000000 # 50 million timesteps.
+    horizon: 2048 # Horizon T, horizon x num actor / num-cpu = 512 * 32 / 8.
+    stepsize: 0.0003 # Adam stepsize
+    num_epochs: 15
+    minibatch_size: 4096
+    gamma: 0.99 # Discount
+    lambd: 0.95 # GAE parameter, lambda.
+    eps: 0.2 # Clip epsilon
+    kl_target: 0.01 # Adaptive KL d_targ

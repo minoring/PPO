@@ -20,6 +20,10 @@ class ValueNet(nn.Module):
         return x
 
     def get_value(self, obs):
-        obs = ptu.to_tensor(obs)
+        if len(obs.shape) <= 1:
+            # If obs without batch dimension, expand.
+            obs = obs.unsqueeze(0)
+
+        obs = obs.to(ptu.device)
         with torch.no_grad():
-            return ptu.to_numpy(self(obs).squeeze(-1))
+            return self(obs).detach().to('cpu')

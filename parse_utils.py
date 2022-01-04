@@ -19,7 +19,7 @@ def get_train_args():
                         default=False)
     parser.add_argument('--hyperparams',
                         help='Hyperparameters to use. Check Appendix A. Schulman et al. 2017',
-                        choices=['mujoco', 'roboschool', 'atari'],
+                        choices=['mujoco', 'humanoid', 'atari'],
                         required=True)
     parser.add_argument('--log-dir', help='Directory to save log', default='log')
     parser.add_argument('--log-csv-path', help='Path to csv file to save log', default='log.csv')
@@ -33,10 +33,6 @@ def get_train_args():
                         choices=['no-clipping-penalty', 'clipping', 'kl-penalty'],
                         required=True)
     parser.add_argument('--ent-coef', help='Entropy coefficient', type=float, default=0.0)
-    parser.add_argument('--shuffle',
-                        help='Whether to shuffle the batch of the memory',
-                        action='store_true',
-                        default=False)
     parser.add_argument('--n-actors',
                         help='The number of parallel actors to collect T timestpes of data',
                         type=int,
