@@ -1,4 +1,5 @@
 # Proximal Policy Optimization Algorithms
+Proximal Policy Optimization (PPO) is a new family of policy gradient methods for reinforcement learning, which alternate between sampling data through interaction with the environment, and optimizing a "surrogate" objective function using stochastic gradient ascent. (Schulman et al. 2017)
 
 ## Training
 
@@ -30,9 +31,6 @@ We compare the surrogate objectives by plotting learning curve from 7 environmen
 
 
 ### Effect of the Entropy
-
-To examine the effect of the entropy bonus, we compare the result of three random seed runs in Walker-2d environment. The learning curve can be found in [`entropy.csv`](entropy.csv)
-
 ![](assets/entropy.png)
 
 ### 10 Runs of evaluative episode.

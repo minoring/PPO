@@ -78,11 +78,13 @@ def main():
     env = get_env(args)
     logger = Logger(args)
 
+    # Setup random seed.
     random.seed(args.seed)
     torch.manual_seed(args.seed)
     np.random.seed(args.seed)
     env.seed(args.seed)
 
+    # Initialize model, transition memory.
     obs_dim = env.observation_space.shape[0]
     act_dim = env.action_space.shape[0]
     actor = ActorNet(obs_dim, act_dim)
@@ -95,8 +97,8 @@ def main():
 
     actor_optim = torch.optim.Adam(actor.parameters(), lr=hyperparams['stepsize'])
     value_optim = torch.optim.Adam(value_net.parameters(), lr=hyperparams['stepsize'])
-    timestep = 0
-    num_updates = 0
+    timestep = 0 # The number of timestep in terms of environment interactions.
+    num_updates = 0 # The number of epoch actor and critic are updated.
     while timestep < hyperparams['timestep']:
         timestep += memory.collect(actor, value_net)
 
