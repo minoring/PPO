@@ -40,6 +40,8 @@ def criterion_actor(actor, actor_old, surrogate_objective, eps, obs, act, adv, e
     logp = actor_dist.log_prob(act).sum(axis=-1)
     logp_old = actor_old_dist.log_prob(act).sum(axis=-1).detach()
 
+    # Advantage normalization.
+    # adv = (adv- adv.mean()) / (adv.std() + 1e-8)
     ratio = torch.exp(logp - logp_old)
     if surrogate_objective == 'clipping':
         loss = -(torch.min(ratio * adv, torch.clamp(ratio, 1 - eps, 1 + eps) * adv)).mean()
@@ -97,8 +99,8 @@ def main():
 
     actor_optim = torch.optim.Adam(actor.parameters(), lr=hyperparams['stepsize'])
     value_optim = torch.optim.Adam(value_net.parameters(), lr=hyperparams['stepsize'])
-    timestep = 0 # The number of timestep in terms of environment interactions.
-    num_updates = 0 # The number of epoch actor and critic are updated.
+    timestep = 0  # The number of timestep in terms of environment interactions.
+    num_updates = 0  # The number of epoch actor and critic are updated.
     while timestep < hyperparams['timestep']:
         timestep += memory.collect(actor, value_net)
 
